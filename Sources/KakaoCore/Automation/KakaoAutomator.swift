@@ -10,6 +10,16 @@ public final class KakaoAutomator {
 
     /// Send a message to a chat by navigating the UI.
     public func sendMessage(to chatName: String, message: String, selfChat: Bool = false) throws {
+        try sendMessages(to: chatName, messages: [message], selfChat: selfChat)
+    }
+
+    /// Send several messages in one chat-window session (opened once), sleeping a random
+    /// minGap...maxGap seconds between consecutive messages so the burst looks human.
+    /// `onSent` is called after each message with its index.
+    public func sendMessages(to chatName: String, messages: [String], selfChat: Bool = false,
+                             minGap: Double = 1.0, maxGap: Double = 3.0,
+                             onSent: ((Int) -> Void)? = nil) throws {
+        guard !messages.isEmpty else { return }
         // 1. Ensure KakaoTalk is running and logged in
         let stateBefore = AppLifecycle.detectState()
         try AppLifecycle.ensureReady(credentials: CredentialStore())
@@ -89,26 +99,32 @@ public final class KakaoAutomator {
             throw AutomationError.inputFieldNotFound
         }
 
-        // 8. Find the message input field
-        guard let inputField = findInputField(in: chatWindow) else {
-            throw AutomationError.inputFieldNotFound
-        }
+        // 8-9. For each message: find the input field, focus it, type, press Return.
+        //      Between messages sleep a random gap (the window stays open).
+        let lo = max(0, min(minGap, maxGap)), hi = max(minGap, maxGap)
+        for (i, message) in messages.enumerated() {
+            if i > 0 {
+                Thread.sleep(forTimeInterval: lo == hi ? lo : Double.random(in: lo...hi))
+            }
+            guard let inputField = findInputField(in: chatWindow) else {
+                throw AutomationError.sendFailed("input field not found before message \(i + 1) of \(messages.count) (\(i) sent)")
+            }
+            _ = AXHelpers.performAction(chatWindow, kAXRaiseAction as String)
+            Thread.sleep(forTimeInterval: i == 0 ? 0.3 : 0.1)
+            AXHelpers.clickElement(inputField)
+            Thread.sleep(forTimeInterval: i == 0 ? 0.3 : 0.1)
 
-        // 9. Focus and type the message
-        _ = AXHelpers.performAction(chatWindow, kAXRaiseAction as String)
-        Thread.sleep(forTimeInterval: 0.3)
-        AXHelpers.clickElement(inputField)
-        Thread.sleep(forTimeInterval: 0.3)
-
-        if AXHelpers.setValue(inputField, message) {
-            Thread.sleep(forTimeInterval: 0.2)
-            AXHelpers.pressKey(keyCode: 36) // Return key
-        } else {
-            _ = AXHelpers.focus(inputField)
-            Thread.sleep(forTimeInterval: 0.1)
-            AXHelpers.typeText(message)
-            Thread.sleep(forTimeInterval: 0.2)
-            AXHelpers.pressKey(keyCode: 36) // Return key
+            if AXHelpers.setValue(inputField, message) {
+                Thread.sleep(forTimeInterval: 0.2)
+                AXHelpers.pressKey(keyCode: 36) // Return key
+            } else {
+                _ = AXHelpers.focus(inputField)
+                Thread.sleep(forTimeInterval: 0.1)
+                AXHelpers.typeText(message)
+                Thread.sleep(forTimeInterval: 0.2)
+                AXHelpers.pressKey(keyCode: 36) // Return key
+            }
+            onSent?(i)
         }
 
         // 10. Close the chat window

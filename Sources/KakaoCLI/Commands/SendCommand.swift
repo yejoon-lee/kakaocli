@@ -11,8 +11,14 @@ struct SendCommand: ParsableCommand {
     @Argument(help: "Chat name to send to (substring match), or any value with --self")
     var chat: String
 
-    @Argument(help: "Message text to send")
-    var message: String
+    @Argument(help: "Message text to send. Several messages are sent in order in one chat-window session.")
+    var messages: [String]
+
+    @Option(name: .long, help: "With several messages: minimum random pause between them (seconds)")
+    var minGap: Double = 1.0
+
+    @Option(name: .long, help: "With several messages: maximum random pause between them (seconds)")
+    var maxGap: Double = 3.0
 
     @Flag(name: [.customLong("me")], help: "Send to self-chat (나와의 채팅) regardless of chat argument")
     var selfChat = false
@@ -24,11 +30,17 @@ struct SendCommand: ParsableCommand {
         let automator = KakaoAutomator()
         let target = selfChat ? "self-chat" : chat
         if dryRun {
-            print("DRY RUN: Would send to '\(target)': \(message)")
-            print("Steps: activate KakaoTalk → find chat '\(target)' → type message → press Enter")
+            for m in messages { print("DRY RUN: Would send to '\(target)': \(m)") }
+            print("Steps: activate KakaoTalk → find chat '\(target)' → open once → type each message + Enter (random \(minGap)-\(maxGap)s gaps)")
             return
         }
-        try automator.sendMessage(to: chat, message: message, selfChat: selfChat)
-        print("Message sent to '\(target)'.")
+        guard !messages.isEmpty else { throw ValidationError("at least one message is required") }
+        try automator.sendMessages(to: chat, messages: messages, selfChat: selfChat,
+                                   minGap: minGap, maxGap: maxGap) { i in
+            let ts = ISO8601DateFormatter().string(from: Date())
+            print("[\(ts)] sent \(i + 1)/\(messages.count)")
+            fflush(stdout)
+        }
+        print(messages.count == 1 ? "Message sent to '\(target)'." : "\(messages.count) messages sent to '\(target)'.")
     }
 }
