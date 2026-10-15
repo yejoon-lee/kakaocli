@@ -26,6 +26,9 @@ struct SendCommand: ParsableCommand {
     @Option(name: .long, help: "With several messages: cap on the total pause before one message (seconds)")
     var maxTotalGap: Double = 20.0
 
+    @Option(name: .long, help: "Abort before the next message as soon as this file exists (checked every 0.3s). Exit code 3.")
+    var stopFile: String?
+
     @Flag(name: [.customLong("me")], help: "Send to self-chat (나와의 채팅) regardless of chat argument")
     var selfChat = false
 
@@ -41,12 +44,19 @@ struct SendCommand: ParsableCommand {
             return
         }
         guard !messages.isEmpty else { throw ValidationError("at least one message is required") }
-        try automator.sendMessages(to: chat, messages: messages, selfChat: selfChat,
-                                   minGap: minGap, maxGap: maxGap,
-                                   perCharGap: perChar, maxTotalGap: maxTotalGap) { i in
-            let ts = ISO8601DateFormatter().string(from: Date())
-            print("[\(ts)] sent \(i + 1)/\(messages.count)")
+        do {
+            try automator.sendMessages(to: chat, messages: messages, selfChat: selfChat,
+                                       minGap: minGap, maxGap: maxGap,
+                                       perCharGap: perChar, maxTotalGap: maxTotalGap,
+                                       stopFile: stopFile) { i in
+                let ts = ISO8601DateFormatter().string(from: Date())
+                print("[\(ts)] sent \(i + 1)/\(messages.count)")
+                fflush(stdout)
+            }
+        } catch AutomationError.stopped(let sent, let total) {
+            print("STOPPED: \(sent)/\(total) sent to '\(target)' (stop file appeared)")
             fflush(stdout)
+            throw ExitCode(3)
         }
         print(messages.count == 1 ? "Message sent to '\(target)'." : "\(messages.count) messages sent to '\(target)'.")
     }

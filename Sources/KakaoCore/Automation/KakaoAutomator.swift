@@ -17,11 +17,20 @@ public final class KakaoAutomator {
     /// after the first, sleep `random(minGap...maxGap) + perCharGap * characters(next message)`,
     /// capped at `maxTotalGap`, which mimics typing time so the burst looks human.
     /// `onSent` is called after each message with its index.
+    /// If `stopFile` is set, the file's existence is checked before every message and every 0.3s
+    /// while waiting; once it exists no further message is typed, the chat window is closed and
+    /// `AutomationError.stopped(sent:total:)` is thrown. It never interrupts a message mid-typing.
     public func sendMessages(to chatName: String, messages: [String], selfChat: Bool = false,
                              minGap: Double = 3.5, maxGap: Double = 5.0,
                              perCharGap: Double = 0.5, maxTotalGap: Double = 20.0,
+                             stopFile: String? = nil,
                              onSent: ((Int) -> Void)? = nil) throws {
         guard !messages.isEmpty else { return }
+        let stopRequested: () -> Bool = {
+            guard let p = stopFile, !p.isEmpty else { return false }
+            return FileManager.default.fileExists(atPath: p)
+        }
+        if stopRequested() { throw AutomationError.stopped(sent: 0, total: messages.count) }
         // 1. Ensure KakaoTalk is running and logged in
         let stateBefore = AppLifecycle.detectState()
         try AppLifecycle.ensureReady(credentials: CredentialStore())
@@ -97,30 +106,41 @@ public final class KakaoAutomator {
             chatWindow = updatedWindows.first(where: { AXHelpers.identifier($0) != "Main Window" })
             if chatWindow != nil { break }
         }
-        guard let chatWindow else {
+        guard var chatWindow else {
             throw AutomationError.inputFieldNotFound
         }
 
         // 8-9. For each message: find the input field, focus it, type, press Return.
         //      Between messages sleep a random gap (the window stays open).
         let lo = max(0, min(minGap, maxGap)), hi = max(minGap, maxGap)
+        var stoppedAt: Int? = nil
         for (i, message) in messages.enumerated() {
             if i > 0 {
                 let base = lo == hi ? lo : Double.random(in: lo...hi)
                 let typing = max(0, perCharGap) * Double(message.count)
-                Thread.sleep(forTimeInterval: min(base + typing, max(lo, maxTotalGap)))
+                let wakeAt = Date().addingTimeInterval(min(base + typing, max(lo, maxTotalGap)))
+                while Date() < wakeAt && !stopRequested() {
+                    Thread.sleep(forTimeInterval: min(0.3, max(0.01, wakeAt.timeIntervalSinceNow)))
+                }
             }
+            if stopRequested() { stoppedAt = i; break }
             var inputField = findInputField(in: chatWindow)
             if inputField == nil {
-                // A freshly opened chat window can appear before its subviews exist; wait for them.
-                let fieldDeadline = Date().addingTimeInterval(4.0)
+                // A freshly opened chat window can appear before its subviews exist, and KakaoTalk may
+                // replace the first window object it reports. Wait, re-fetching the chat window each time.
+                let fieldDeadline = Date().addingTimeInterval(8.0)
                 while inputField == nil && Date() < fieldDeadline {
-                    Thread.sleep(forTimeInterval: 0.3)
+                    Thread.sleep(forTimeInterval: 0.4)
+                    if let w = AXHelpers.windows(app).first(where: { AXHelpers.identifier($0) != "Main Window" }) {
+                        chatWindow = w
+                    }
                     inputField = findInputField(in: chatWindow)
                 }
             }
             guard let inputField else {
-                throw AutomationError.sendFailed("input field not found before message \(i + 1) of \(messages.count) (\(i) sent)")
+                let roles = AXHelpers.children(chatWindow).map { AXHelpers.role($0) ?? "?" }.joined(separator: ",")
+                let nWin = AXHelpers.windows(app).count
+                throw AutomationError.sendFailed("input field not found before message \(i + 1) of \(messages.count) (\(i) sent) [windows=\(nWin) chatWindowChildren=\(roles)]")
             }
             _ = AXHelpers.performAction(chatWindow, kAXRaiseAction as String)
             Thread.sleep(forTimeInterval: i == 0 ? 0.3 : 0.1)
@@ -143,6 +163,7 @@ public final class KakaoAutomator {
         // 10. Close the chat window
         Thread.sleep(forTimeInterval: 0.3)
         _ = AXHelpers.closeWindow(chatWindow)
+        if let stoppedAt { throw AutomationError.stopped(sent: stoppedAt, total: messages.count) }
     }
 
     /// Find the message input AXTextArea in a chat window.
@@ -171,6 +192,7 @@ public enum AutomationError: Error, CustomStringConvertible {
     case chatNotFound(String)
     case inputFieldNotFound
     case sendFailed(String)
+    case stopped(sent: Int, total: Int)
 
     public var description: String {
         switch self {
@@ -182,6 +204,8 @@ public enum AutomationError: Error, CustomStringConvertible {
             return "Could not find the message input field"
         case .sendFailed(let msg):
             return "Failed to send message: \(msg)"
+        case .stopped(let sent, let total):
+            return "Stopped by stop file after \(sent) of \(total) sent"
         }
     }
 }
