@@ -13,11 +13,13 @@ public final class KakaoAutomator {
         try sendMessages(to: chatName, messages: [message], selfChat: selfChat)
     }
 
-    /// Send several messages in one chat-window session (opened once), sleeping a random
-    /// minGap...maxGap seconds between consecutive messages so the burst looks human.
+    /// Send several messages in one chat-window session (opened once). Before each message
+    /// after the first, sleep `random(minGap...maxGap) + perCharGap * characters(next message)`,
+    /// capped at `maxTotalGap`, which mimics typing time so the burst looks human.
     /// `onSent` is called after each message with its index.
     public func sendMessages(to chatName: String, messages: [String], selfChat: Bool = false,
-                             minGap: Double = 1.0, maxGap: Double = 3.0,
+                             minGap: Double = 1.5, maxGap: Double = 3.0,
+                             perCharGap: Double = 0.3, maxTotalGap: Double = 15.0,
                              onSent: ((Int) -> Void)? = nil) throws {
         guard !messages.isEmpty else { return }
         // 1. Ensure KakaoTalk is running and logged in
@@ -104,7 +106,9 @@ public final class KakaoAutomator {
         let lo = max(0, min(minGap, maxGap)), hi = max(minGap, maxGap)
         for (i, message) in messages.enumerated() {
             if i > 0 {
-                Thread.sleep(forTimeInterval: lo == hi ? lo : Double.random(in: lo...hi))
+                let base = lo == hi ? lo : Double.random(in: lo...hi)
+                let typing = max(0, perCharGap) * Double(message.count)
+                Thread.sleep(forTimeInterval: min(base + typing, max(lo, maxTotalGap)))
             }
             guard let inputField = findInputField(in: chatWindow) else {
                 throw AutomationError.sendFailed("input field not found before message \(i + 1) of \(messages.count) (\(i) sent)")
