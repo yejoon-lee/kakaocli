@@ -186,6 +186,10 @@ public enum AXHelpers {
         return nil
     }
 
+    /// AXIdentifier of the chat-name label in a chat-list cell. KakaoTalk changes it between builds
+    /// ("_NS:18" originally; "_NS:40" as of 2026-10, when sends failed with "Chat not found").
+    public static let chatNameLabelIds: Set<String> = ["_NS:18", "_NS:40"]
+
     /// Find the AXRow in a chat list whose name label matches the given text.
     /// KakaoTalk chat list: AXTable > AXRow > AXCell > AXStaticText(id="_NS:18")
     public static func findChatRow(_ table: AXUIElement, chatName: String, exact: Bool = false) -> AXUIElement? {
@@ -194,7 +198,7 @@ public enum AXHelpers {
             for cell in children(row) {
                 guard role(cell) == "AXCell" else { continue }
                 for child in children(cell) {
-                    if role(child) == "AXStaticText" && identifier(child) == "_NS:18" {
+                    if role(child) == "AXStaticText" && chatNameLabelIds.contains(identifier(child) ?? "") {
                         let name = value(child) ?? ""
                         let matches = exact ? name == chatName : name.localizedCaseInsensitiveContains(chatName)
                         if matches {
