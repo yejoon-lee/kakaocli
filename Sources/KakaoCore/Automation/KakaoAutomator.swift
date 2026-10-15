@@ -19,7 +19,7 @@ public final class KakaoAutomator {
     /// `onSent` is called after each message with its index.
     public func sendMessages(to chatName: String, messages: [String], selfChat: Bool = false,
                              minGap: Double = 3.5, maxGap: Double = 5.0,
-                             perCharGap: Double = 0.3, maxTotalGap: Double = 17.0,
+                             perCharGap: Double = 0.5, maxTotalGap: Double = 20.0,
                              onSent: ((Int) -> Void)? = nil) throws {
         guard !messages.isEmpty else { return }
         // 1. Ensure KakaoTalk is running and logged in
