@@ -57,6 +57,12 @@ public enum DeviceInfo {
     /// 3. Recover userId by reversing SHA-512 hash from plist revision keys
     /// 4. FSChatWindowFrame_ common suffix
     public static func userId() throws -> Int {
+        // Local override for accounts whose ID is not detected from KakaoTalk preferences.
+        let overridePath = NSHomeDirectory() + "/.kakaocli/user-id"
+        if let text = try? String(contentsOfFile: overridePath, encoding: .utf8),
+           let id = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)), id > 0 {
+            return id
+        }
         let plistPaths = [containerPreferencesPath, preferencesPath]
         for plistPath in plistPaths {
             guard FileManager.default.fileExists(atPath: plistPath) else { continue }
