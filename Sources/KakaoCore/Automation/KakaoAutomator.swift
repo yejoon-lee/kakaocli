@@ -110,7 +110,16 @@ public final class KakaoAutomator {
                 let typing = max(0, perCharGap) * Double(message.count)
                 Thread.sleep(forTimeInterval: min(base + typing, max(lo, maxTotalGap)))
             }
-            guard let inputField = findInputField(in: chatWindow) else {
+            var inputField = findInputField(in: chatWindow)
+            if inputField == nil {
+                // A freshly opened chat window can appear before its subviews exist; wait for them.
+                let fieldDeadline = Date().addingTimeInterval(4.0)
+                while inputField == nil && Date() < fieldDeadline {
+                    Thread.sleep(forTimeInterval: 0.3)
+                    inputField = findInputField(in: chatWindow)
+                }
+            }
+            guard let inputField else {
                 throw AutomationError.sendFailed("input field not found before message \(i + 1) of \(messages.count) (\(i) sent)")
             }
             _ = AXHelpers.performAction(chatWindow, kAXRaiseAction as String)
