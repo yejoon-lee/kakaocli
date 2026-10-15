@@ -15,16 +15,16 @@ struct SendCommand: ParsableCommand {
     var messages: [String]
 
     @Option(name: .long, help: "With several messages: minimum random base pause between them (seconds)")
-    var minGap: Double = 1.5
+    var minGap: Double = 3.5
 
     @Option(name: .long, help: "With several messages: maximum random base pause between them (seconds)")
-    var maxGap: Double = 3.0
+    var maxGap: Double = 5.0
 
     @Option(name: .long, help: "With several messages: extra pause per character of the next message (typing time, seconds)")
     var perChar: Double = 0.3
 
     @Option(name: .long, help: "With several messages: cap on the total pause before one message (seconds)")
-    var maxTotalGap: Double = 15.0
+    var maxTotalGap: Double = 17.0
 
     @Flag(name: [.customLong("me")], help: "Send to self-chat (나와의 채팅) regardless of chat argument")
     var selfChat = false

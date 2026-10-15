@@ -18,8 +18,8 @@ public final class KakaoAutomator {
     /// capped at `maxTotalGap`, which mimics typing time so the burst looks human.
     /// `onSent` is called after each message with its index.
     public func sendMessages(to chatName: String, messages: [String], selfChat: Bool = false,
-                             minGap: Double = 1.5, maxGap: Double = 3.0,
-                             perCharGap: Double = 0.3, maxTotalGap: Double = 15.0,
+                             minGap: Double = 3.5, maxGap: Double = 5.0,
+                             perCharGap: Double = 0.3, maxTotalGap: Double = 17.0,
                              onSent: ((Int) -> Void)? = nil) throws {
         guard !messages.isEmpty else { return }
         // 1. Ensure KakaoTalk is running and logged in
